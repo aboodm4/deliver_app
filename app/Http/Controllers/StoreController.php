@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Models\Store;
-use App\Models\Product;
 
+use App\Models\Product;
+use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use function Pest\Laravel\json;
 use App\Http\Requests\StoreRequest;
+use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
 
 class StoreController extends Controller
 {
@@ -38,11 +41,21 @@ class StoreController extends Controller
     public function store(StoreRequest $request)
     {
         $request->validated();
-        $user_id = auth()->user()->id;
+        $user_id = Auth::user()->id;
 
         $newstore = new Store();
         $newstore->name = $request->name;
+        $newstore->arname = $request->arname;
         $newstore->location = $request->location;
+        $newstore->arlocation = $request->arlocation;
+        $newstore->description = $request->description;
+        $newstore->ardescription = $request->ardescription;
+        $newstore->rate = $request->rate;
+        if($request->img != null){
+            $path = $request->img ->move('uploads',
+            Str::uuid()->toString() . '-' . $request->img->getClientOriginalName());
+            $newstore->img = $path;
+        }
         $newstore->storehead_id = $user_id;
         $newstore->save();
 
@@ -84,7 +97,7 @@ class StoreController extends Controller
     public function update(StoreRequest $request)
     {
         $request->validated();
-
+        $user_id=Auth::user()->id;
         $store = Store::find( $request->store_id );
         if (!$store) {
             return response()->json([
@@ -92,8 +105,18 @@ class StoreController extends Controller
             ], 404);
         }
         $store->name = $request->name;
+        $store->arname = $request->arname;
         $store->location = $request->location;
-        $store->storehead_id = $request->storehead_id;
+        $store->arlocation = $request->arlocation;
+        $store->description = $request->description;
+        $store->ardescription = $request->ardescription;
+        $store->rate = $request->rate;
+        if($request->img != null){
+            $path = $request->img ->move('uploads',
+            Str::uuid()->toString() . '-' . $request->img->getClientOriginalName());
+            $store->img = $path;
+        }
+        $store->storehead_id = $user_id;
         $store->save();
 
         return response()->json([

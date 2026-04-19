@@ -14,7 +14,13 @@ return new class extends Migration
         Schema::create('stores', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique();
+            $table->string('arname')->unique()->nullable();
             $table->text('location')->nullable();
+            $table->text('arlocation')->nullable();
+            $table->text('description')->nullable();
+            $table->text('ardescription')->nullable();
+            $table->string('rate')->nullable();
+            $table->text('img')->nullable();
             $table->unsignedBigInteger('storehead_id');
             $table->foreign('storehead_id')->references('id')->on('users')->onDelete('Cascade');
             $table->timestamps();

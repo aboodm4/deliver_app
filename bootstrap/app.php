@@ -15,12 +15,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             \Illuminate\Session\Middleware\StartSession::class,
-
+            // \Fruitcake\Cors\HandleCors::class, // Ensure this line is present
+            \Illuminate\Http\Middleware\HandleCors::class, // Ensure this middleware is present
         ]);
 
 
         $middleware->alias([
             'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
+            'admin' => \App\Http\Middleware\AdminMiddleware::class,
+            'delivery'=>\App\Http\Middleware\DeliveryMiddleware::class,
+            'deliveryOrAdmin'=>\App\Http\Middleware\DeliveryOrAdminMiddleware::class,
         ]);
 
         //

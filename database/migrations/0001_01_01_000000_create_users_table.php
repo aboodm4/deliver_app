@@ -20,7 +20,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->text('img')->nullable();
             $table->text('location')->nullable();
-            $table->enum('role', ['admin', 'storehead', 'user'])->default('user'); // Default role set to 'User'
+            $table->enum('role', ['admin', 'delivery', 'user'])->default('user'); // Default role set to 'User'
             $table->string('password');
             $table->rememberToken();
             $table->timestamps();

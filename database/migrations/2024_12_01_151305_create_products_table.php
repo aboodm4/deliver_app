@@ -16,7 +16,11 @@ return new class extends Migration
             $table->string('name');
             $table->text('description')->nullable();
             $table->string('price');
+            $table->string('time')->nullable();
+            $table->string('rate')->nullable();
             $table->string('quantity')->default('0');
+            $table->string('arname')->nullable();
+            $table->text('ardescription')->nullable();
             $table->text('img')->nullable();
             $table->unsignedBigInteger('store_id');
             $table->foreign('store_id')->references('id')->on('stores')->onDelete('Cascade');

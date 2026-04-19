@@ -22,8 +22,13 @@ class StoreRequest extends FormRequest
     public function rules(): array {
         return [
             'name' => 'required|string|max:255',
-            'location' => 'nullable|string|max:1000',
-            'storehead_id' => 'required|exists:users,id',
+            'arname' => 'nullable|string|max:255',
+            'location' => 'required|string|max:255',
+            'arlocation' => 'nullable|string|max:255',
+            'description' => 'required|string|max:255',
+            'ardescription' => 'nullable|string|max:255',
+            'rate' => 'required|string|max:255',
+            'img' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ];
     }
 }

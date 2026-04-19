@@ -13,9 +13,13 @@ return new class extends Migration
     {
         Schema::create('carts', function (Blueprint $table) {
             $table->id();
-            $table->enum('status', ['active', 'abandoned', 'completed'])->default('active'); // Cart status
+            $table->enum('status', ['active', 'completed'])->default('active'); // Cart status
+            $table->string('quantity');
+            // $table->string('price'); // Price of the product when added to the cart
+            $table->unsignedBigInteger('product_id');
             $table->unsignedBigInteger('user_id');
 
+            $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->timestamps();
         });

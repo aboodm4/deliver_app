@@ -2,14 +2,14 @@
 
 namespace Database\Factories;
 
-use App\Models\Cart;
 use App\Models\Product;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\CartProduct>
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Favourite>
  */
-class CartProductFactory extends Factory
+class FavouriteFactory extends Factory
 {
     /**
      * Define the model's default state.
@@ -19,8 +19,7 @@ class CartProductFactory extends Factory
     public function definition(): array
     {
         return [
-            'quantity' => fake()->numberBetween(1, 5),
-            'cart_id' => Cart::inRandomOrder()->first()->id, // Assuming a cart exists
+            'user_id' => User::inRandomOrder()->first()->id, // Assuming a cart exists
             'product_id' => Product::inRandomOrder()->first()->id, // Assuming a product exis
         ];
     }

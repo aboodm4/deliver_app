@@ -11,12 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('orders', function (Blueprint $table) {
+        Schema::create('favourites', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->nullable();
-            $table->enum('status', ['userVerfied', 'storeVerfied', 'transfer', 'completed'])->default('active'); // Cart status
-            $table->string('description')->nullable();
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('Cascade');
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('product_id');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+            $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
             $table->timestamps();
         });
     }
@@ -26,6 +26,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('orders');
+        Schema::dropIfExists('favourites');
     }
 };

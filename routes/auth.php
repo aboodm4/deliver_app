@@ -16,7 +16,7 @@ Route::post('/login', [AuthenticatedSessionController::class, 'store'])
     ->middleware('guest')
     ->name('login');
 
-Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
+    Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
     ->middleware('auth:sanctum')
     ->name('logout');
 

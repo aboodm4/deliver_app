@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Product;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ProductRequest extends FormRequest
@@ -22,7 +23,12 @@ class ProductRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string|max:1000',
+            'price' => 'nullable|string|max:1000',
+            'quantity' => 'nullable|string|max:1000',
+            'img'=>'nullable',
+            'store_id'=>'required'
         ];
     }
 }

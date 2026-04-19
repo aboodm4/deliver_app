@@ -37,7 +37,7 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'img' => fake()->imageUrl(),
             'location' => fake()->address,
-            'role' => fake()->randomElement(['admin', 'storehead', 'user']),
+            'role' => fake()->randomElement(['admin', 'delivery', 'user']),
             'password' => bcrypt('password'), // Use a default password
             'remember_token' => Str::random(10),
         ];

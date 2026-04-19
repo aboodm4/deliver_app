@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers\Auth;
 
 use App\Models\User;
@@ -15,14 +14,6 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    // public function store(LoginRequest $request): Response
-    // {
-    //     $request->authenticate();
-
-    //     $request->session()->regenerate();
-
-    //     return response()->noContent();
-    // }
     public function store(LoginRequest $request): Response
     {
         // Authenticate the user by phone and password
@@ -30,62 +21,46 @@ class AuthenticatedSessionController extends Controller
 
         // Check if user exists and password matches
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
+            return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         // Generate a token for the user using Sanctum
-        $token = $user->createToken('deliver_app')->plainTextToken;
-
-        // Regenerate the session to avoid session fixation attacks
-        $request->session()->regenerate();
-
-        $user->makeHidden(['created_at', 'email_verified_at', 'updated_at']);
-
+        $token = $user->createToken("auth_token");
 
         // Return the response with user data, message, and token
+        $user->makeHidden(['created_at', 'email_verified_at', 'updated_at']);
+
         return response()->json([
-            'message' => 'Login successful',
-            'user' => $user,
-            'token' => $token
+            "message" => "Login successful",
+            "user" => $user,
+            "token" => $token->plainTextToken
         ]);
     }
 
     /**
      * Destroy an authenticated session.
      */
-    public function destroy(Request $request): Response
+    public function destroy(Request $request)
     {
-        // // Check if the user is authenticated
-        if (!Auth::guard('sanctum')->check()) {
-            return response()->json(['message' => 'Unauthenticated.'], 401);
-        }
+        if (Auth::check()) {
+            // Optionally, revoke only the current token if needed
+            // $request->user()->currentAccessToken()->delete();
 
-            // Check if the user is authenticated using the 'sanctum' guard (for token-based authentication)
-    if (!Auth::guard('sanctum')->check()) {
-        return response()->json(['message' => 'Unauthenticated.'], 400);
-    }
-
-        // Invalidate the user's session for web guard
-        Auth::guard('web')->logout();
-
-        // Invalidate the session
-        $request->session()->invalidate();
-
-        // Regenerate the CSRF token to prevent session fixation attacks
-        $request->session()->regenerateToken();
-
-        // Revoke the Sanctum token to log out the user from the API
-        if ($request->user()) {
-            // Delete all the user's API tokens
+            // Revoke all tokens associated with the authenticated user
             $request->user()->tokens->each(function ($token) {
-                $token->delete();  // Delete each token individually
+                $token->delete();
             });
+
+            // Return a response indicating successful logout
+            return response()->json([
+                'message' => 'Logout successful',
+            ], 200);
+        } else {
+            // If the user is not authenticated, return an appropriate response
+            return response()->json([
+                'message' => 'No user is logged in',
+            ], 401);
         }
-
-        // Return a response indicating successful logout
-        return response()->json([
-            'message' => 'Logout successful',
-        ]);
     }
-
 }
+
