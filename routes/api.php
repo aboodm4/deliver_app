@@ -27,6 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/show/{id}',[StoreController::class, 'show']);
         Route::post('/update',[StoreController::class, 'update'])->middleware(['auth', 'admin']);
         Route::get('/destroy/{id}',[StoreController::class, 'destroy'])->middleware(['auth', 'admin']);
+        
     });
 
     Route::prefix('/user')->group(function () {
@@ -45,6 +46,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/store',[ProductController::class,'store'])->middleware(['auth', 'admin']);
         Route::post('/update',[ProductController::class,'update'])->middleware(['auth', 'admin']);
         Route::get('/destroy/{id}',[ProductController::class,'destroy'])->middleware(['auth', 'admin']);
+        
+        // مسارات العمليات المتوازية (Parallel Programming Requirements)
+        Route::post('/deduct-inventory', [ProductController::class, 'deductInventory']);
+        Route::post('/bulk-upload', [ProductController::class, 'bulkUploadProducts']);
+        Route::get('/stats/{id}', [ProductController::class, 'getProductStats']);
     });
 
     Route::prefix('/favourite')->group(function(){

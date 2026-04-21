@@ -27,7 +27,7 @@ class StoreRequest extends FormRequest
             'arlocation' => 'nullable|string|max:255',
             'description' => 'required|string|max:255',
             'ardescription' => 'nullable|string|max:255',
-            'rate' => 'required|string|max:255',
+            'rate' => 'nullable|string|max:255',
             'img' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ];
     }

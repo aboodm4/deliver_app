@@ -12,7 +12,13 @@ class Store extends Model
     
     protected $fillable = [
         'name',
+        'arname',
         'location',
+        'arlocation',
+        'description',
+        'ardescription',
+        'rate',
+        'img',
         'storehead_id'
     ];
 

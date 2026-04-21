@@ -8,9 +8,12 @@ use App\Models\Store;
 use App\Models\Product;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use function Pest\Laravel\json;
+
 use App\Http\Requests\StoreRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\RateLimiter;
 use Symfony\Component\HttpFoundation\Response;
 
 class StoreController extends Controller
@@ -40,27 +43,18 @@ class StoreController extends Controller
      */
     public function store(StoreRequest $request)
     {
-        $request->validated();
-        $user_id = Auth::user()->id;
+        $data = $request->validated();
+        $data['storehead_id'] = Auth::id();
 
-        $newstore = new Store();
-        $newstore->name = $request->name;
-        $newstore->arname = $request->arname;
-        $newstore->location = $request->location;
-        $newstore->arlocation = $request->arlocation;
-        $newstore->description = $request->description;
-        $newstore->ardescription = $request->ardescription;
-        $newstore->rate = $request->rate;
-        if($request->img != null){
-            $path = $request->img ->move('uploads',
-            Str::uuid()->toString() . '-' . $request->img->getClientOriginalName());
-            $newstore->img = $path;
+        if ($request->hasFile('img')) {
+            $data['img'] = $request->file('img')->move('uploads', 
+                Str::uuid()->toString() . '-' . $request->file('img')->getClientOriginalName());
         }
-        $newstore->storehead_id = $user_id;
-        $newstore->save();
+
+        Store::create($data);
 
         return response()->json([
-            'message' => 'store added successful',
+            'message' => 'Store added successfully',
         ]);
     }
 
@@ -96,31 +90,29 @@ class StoreController extends Controller
      */
     public function update(StoreRequest $request)
     {
-        $request->validated();
-        $user_id=Auth::user()->id;
-        $store = Store::find( $request->store_id );
+        $data = $request->validated();
+        $store = Store::find($request->store_id);
+
         if (!$store) {
             return response()->json([
                 'message' => 'Store not found.',
             ], 404);
         }
-        $store->name = $request->name;
-        $store->arname = $request->arname;
-        $store->location = $request->location;
-        $store->arlocation = $request->arlocation;
-        $store->description = $request->description;
-        $store->ardescription = $request->ardescription;
-        $store->rate = $request->rate;
-        if($request->img != null){
-            $path = $request->img ->move('uploads',
-            Str::uuid()->toString() . '-' . $request->img->getClientOriginalName());
-            $store->img = $path;
+
+        if ($request->hasFile('img')) {
+            // Optional: Delete old image from storage if it exists
+            if ($store->img && file_exists(public_path($store->img))) {
+                unlink(public_path($store->img));
+            }
+
+            $data['img'] = $request->file('img')->move('uploads', 
+                Str::uuid()->toString() . '-' . $request->file('img')->getClientOriginalName());
         }
-        $store->storehead_id = $user_id;
-        $store->save();
+
+        $store->update($data);
 
         return response()->json([
-            'message' => 'store edit successfully',
+            'message' => 'Store updated successfully',
         ]);
     }
 
@@ -139,15 +131,10 @@ class StoreController extends Controller
             ], 404);
         }
 
-        // Delete all products associated with this store
-        Product::where('store_id', $store->id)->delete();
+        // Products will be deleted automatically due to Cascade Delete in migration.
 
         // Delete the store
         $store->delete();
 
-        return response()->json([
-            'message' => 'Store and its products deleted successfully.',
-        ]);
     }
-
 }
