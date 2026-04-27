@@ -47,7 +47,7 @@ class StoreController extends Controller
         $data['storehead_id'] = Auth::id();
 
         if ($request->hasFile('img')) {
-            $data['img'] = $request->file('img')->move('uploads', 
+            $data['img'] = $request->file('img')->move('uploads',
                 Str::uuid()->toString() . '-' . $request->file('img')->getClientOriginalName());
         }
 
@@ -85,6 +85,26 @@ class StoreController extends Controller
         //
     }
 
+/**
+ * آلية Semaphore للتحكم في الضغط على قاعدة البيانات
+ */
+// public function getProductStats($id)
+// {
+//     $lockKey = 'product_stats_semaphore_';
+//     $lock = Cache::lock($lockKey . $id, 5); // قفل لمدة 5 ثوانٍ
+
+//     if ($lock->get()) {
+//         try {
+//             $product = Product::findOrFail($id);
+//             // عملية استعلام مكلفة تحاكي قراءة سجلات المبيعات أو الإحصائيات
+//             return response()->json(['name' => $product->name, 'stock' => $product->quantity]);
+//         } finally {
+//             $lock->release();
+//         }
+//     } else {
+//         return response()->json(['message' => 'System under heavy load, try again later.'], 429);
+//     }
+// }
     /**
      * Update the specified resource in storage.
      */
@@ -105,7 +125,7 @@ class StoreController extends Controller
                 unlink(public_path($store->img));
             }
 
-            $data['img'] = $request->file('img')->move('uploads', 
+            $data['img'] = $request->file('img')->move('uploads',
                 Str::uuid()->toString() . '-' . $request->file('img')->getClientOriginalName());
         }
 

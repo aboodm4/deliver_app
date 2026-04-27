@@ -7,6 +7,7 @@ use App\Models\Product;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Http\Requests\ProductRequest;
+use App\Jobs\ProcessProductUpload;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
@@ -190,18 +191,15 @@ class ProductController extends Controller
         ]);
     }
 
-    /**
-     * Requirement 1: حماية البيانات من التضارب (Concurrency & Race Condition)
-     * دالة خصم الكمية من مخزون المنتج باستخدام Pessimistic Locking (lockForUpdate)
-     */
-    public function deductInventory(Request $request)
+
+    public function MinusProduct(Request $request)
     {
         $productId = $request->product_id;
         $quantityToDeduct = $request->quantity;
 
         try {
             return DB::transaction(function () use ($productId, $quantityToDeduct) {
-                // استخدام lockForUpdate لمنع التداخل وحماية القسم الحرج
+
                 $product = Product::where('id', $productId)->lockForUpdate()->first();
 
                 if (!$product) {
@@ -225,40 +223,29 @@ class ProductController extends Controller
         }
     }
 
-    /**
-     * Requirement 2: إدارة الموارد الحاسوبية (Resource & Capacity Management)
-     * دالة معالجة رفع المنتجات الضخمة Bulk Upload باستخدام الخلفية (Background Workers)
-     */
-    public function bulkUploadProducts(Request $request)
-    {
-        $request->validate(['file' => 'required|file|mimes:xls,xlsx,csv']);
 
-        // يتم إرسال المهمة للطابور لمحاكة الـ Thread Pool (مثلاً 10 خيوط معالجة)
-        // ProcessProductUploadJob::dispatch($request->file('file')->path());
+    public function UploadProducts(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xls,xlsx,csv,pdf,png,webp',
+            'store_id' => 'required|exists:stores,id'
+        ]);
+
+        $path = $request->file('file')->store('temp_uploads');
+        $absolutePath = storage_path('app/' . $path);
+
+        ProcessProductUpload::dispatch($absolutePath, $request->store_id);
 
         return response()->json([
             'message' => 'Bulk upload started in the background (Thread Pool processing).',
         ], 202);
     }
 
-    /**
-     * آلية Semaphore للتحكم في الضغط على قاعدة البيانات
-     */
-    public function getProductStats($id)
-    {
-        $lockKey = 'product_stats_semaphore_';
-        $lock = Cache::lock($lockKey . $id, 5); // قفل لمدة 5 ثوانٍ
 
-        if ($lock->get()) {
-            try {
-                $product = Product::findOrFail($id);
-                // عملية استعلام مكلفة تحاكي قراءة سجلات المبيعات أو الإحصائيات
-                return response()->json(['name' => $product->name, 'stock' => $product->quantity]);
-            } finally {
-                $lock->release();
-            }
-        } else {
-            return response()->json(['message' => 'System under heavy load, try again later.'], 429);
-        }
-    }
+
+
+
 }
+
+
+

@@ -27,7 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/show/{id}',[StoreController::class, 'show']);
         Route::post('/update',[StoreController::class, 'update'])->middleware(['auth', 'admin']);
         Route::get('/destroy/{id}',[StoreController::class, 'destroy'])->middleware(['auth', 'admin']);
-        
+
     });
 
     Route::prefix('/user')->group(function () {
@@ -39,18 +39,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/add',action: [MainController::class, 'store'])->middleware(['auth', 'admin']);
         Route::get('/delete/{id}',[MainController::class, 'destroy'])->middleware(['auth', 'admin']);
     });
-  
+
     Route::prefix('/product')->group(function(){
         Route::get('/',[ProductController::class,'index']);
         Route::get('/show/{id}',[ProductController::class,'show']);
         Route::post('/store',[ProductController::class,'store'])->middleware(['auth', 'admin']);
         Route::post('/update',[ProductController::class,'update'])->middleware(['auth', 'admin']);
         Route::get('/destroy/{id}',[ProductController::class,'destroy'])->middleware(['auth', 'admin']);
-        
-        // مسارات العمليات المتوازية (Parallel Programming Requirements)
-        Route::post('/deduct-inventory', [ProductController::class, 'deductInventory']);
-        Route::post('/bulk-upload', [ProductController::class, 'bulkUploadProducts']);
-        Route::get('/stats/{id}', [ProductController::class, 'getProductStats']);
+
+
+        Route::post('/minus-product', [ProductController::class, 'MinusProduct']);
+
+
+        Route::post('/upload', [ProductController::class, 'UploadProducts']);
+
+
     });
 
     Route::prefix('/favourite')->group(function(){
@@ -80,6 +83,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/allorders',action: [OrderController::class,'AllOrders'])->middleware(['auth','admin']);
         Route::post('/cancelorder',[OrderController::class,'CancelOrder']);
 
+        // Route::get('/stats/{id}', [ProductController::class, 'getProductStats']);
 
 
         Route::post('/transconfirm',[OrderController::class,'TransConfirm'])->middleware(['auth', 'delivery']);
