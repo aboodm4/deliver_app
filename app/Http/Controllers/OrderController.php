@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SendOrderEmail;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\Product;
@@ -105,7 +106,8 @@ class OrderController extends Controller
         }
         $subtotal=0;
         foreach ($carts as $item) {
-            $subtotal += $item->quantity * $item->product->price;
+            $subtotal += (float)$item->quantity * (float)$item->product->price;
+
 
             $pp = Product::find($item->product_id);
             if ($pp->quantity < $item->quantity) {
@@ -141,6 +143,7 @@ class OrderController extends Controller
             $item->status = 'completed';
             $item->save();
         }
+        SendOrderEmail::dispatch($neworder);
 
             return response()->json([
                 'message' => 'order placed successfully',

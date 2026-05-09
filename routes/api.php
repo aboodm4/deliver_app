@@ -8,6 +8,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\FavouriteController;
+use App\Jobs\ProcessDailySalesJob;
 
 Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
     return $request->user();
@@ -17,7 +18,12 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 require __DIR__.'/auth.php';
 
 Route::middleware('auth:sanctum')->group(function () {
-
+    Route::post('/process-daily-sales',function(){
+        ProcessDailySalesJob::dispatch();
+        return response()->json([
+            'message'=>'Daily sales processing started'
+        ]);
+    });
 
     Route::get('/',[MainController::class, 'index']);
 
