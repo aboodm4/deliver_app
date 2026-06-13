@@ -26,6 +26,41 @@ class ProductController extends Controller
     }
 
     /**
+     * Display the most requested products using caching (Redis).
+     */
+    public function popular()
+    {
+        // استخدام طبقة التخزين المؤقت لجلب المنتجات الأكثر طلباً لمدة ساعة (3600 ثانية)
+        $popularProducts = Cache::remember('popular_products', 3600, function () {
+            // نجلب معرّفات المنتجات الأكثر طلباً من جدول الطلبات
+            $productIds = DB::table('order_products')
+                ->select('product_id', DB::raw('SUM(CAST(quantity AS UNSIGNED)) as total_requests'))
+                ->groupBy('product_id')
+                ->orderByDesc('total_requests')
+                ->limit(10)
+                ->pluck('product_id');
+
+            // إذا لم يكن هنالك طلبات، نعيد منتجات عشوائية أو فارغة
+            if ($productIds->isEmpty()) {
+                return Product::limit(10)->get();
+            }
+
+            // جلب المنتجات وترتيبها بناءً على المبيعات باستخدام المعرفات المجمعة
+            // نضعها بالترتيب المطلوب
+            $idsOrder = implode(',', $productIds->toArray());
+            return Product::whereIn('id', $productIds)
+                          ->orderByRaw("FIELD(id, {$idsOrder})")
+                          ->get();
+        });
+
+        return response()->json([
+            'message' => 'تم جلب المنتجات بنجاح',
+            'product' => $popularProducts,
+            'source' => 'redis_cache'
+        ], 200);
+    }
+
+    /**
      * Show the form for creating a new resource.
      */
     public function create()

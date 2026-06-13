@@ -17,6 +17,14 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
 require __DIR__.'/auth.php';
 
+// Route لمحاكاة موازنة العمليات و السيرفرات (Load Balancing)
+Route::get('/node-status', function () {
+    return response()->json([
+        'message' => 'Task handled by node',
+        'port' => request()->getPort()
+    ]);
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/process-daily-sales',function(){
         ProcessDailySalesJob::dispatch();
@@ -47,8 +55,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('/product')->group(function(){
-        Route::get('/',[ProductController::class,'index']);
-        Route::get('/show/{id}',[ProductController::class,'show']);
+        // استخدام middleware التخزين المؤقت لتطبيق مبدأ AOP (فصل التخزين عن كود الكنترولر)
+        Route::get('/',[ProductController::class,'index'])->middleware('cache.response');
+        Route::get('/popular', [ProductController::class, 'popular']); // طبقة تخزين مؤقت للمنتجات الأكثر طلباً
+        Route::get('/show/{id}',[ProductController::class,'show'])->middleware('cache.response');
         Route::post('/store',[ProductController::class,'store'])->middleware(['auth', 'admin']);
         Route::post('/update',[ProductController::class,'update'])->middleware(['auth', 'admin']);
         Route::get('/destroy/{id}',[ProductController::class,'destroy'])->middleware(['auth', 'admin']);
