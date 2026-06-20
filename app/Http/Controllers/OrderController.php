@@ -9,6 +9,11 @@ use App\Models\Product;
 use App\Models\OrderProduct;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 
 class OrderController extends Controller
 {
@@ -148,6 +153,230 @@ class OrderController extends Controller
             return response()->json([
                 'message' => 'order placed successfully',
             ], 200);
+    }
+
+    public function storeV2(Request $request)
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'Unauthenticated',
+                'api_version' => 'v2-safe',
+            ], 401);
+        }
+
+        $request->validate([
+            'payment' => 'required|in:cash,bank,syriatelcash,mtncash',
+            'place' => 'required|string',
+            'street' => 'nullable|string',
+            'buildingfloor' => 'nullable|string',
+            'phone' => 'nullable|string|max:20',
+            'description' => 'nullable|string',
+            'simulate_failure' => 'sometimes|boolean',
+        ]);
+
+        $simulateFailure = $request->boolean('simulate_failure');
+
+        if (
+            $simulateFailure
+            && (
+                !app()->environment(['local', 'testing'])
+                || !config('project_demo.enable_acid_failure_demo')
+            )
+        ) {
+            return response()->json([
+                'message' => 'ACID failure simulation is disabled',
+            ], 403);
+        }
+
+        $carts = Cart::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->get();
+
+        if ($carts->isEmpty()) {
+            return response()->json([
+                'message' => 'You don\'t have any products in your cart to order',
+                'api_version' => 'v2-safe',
+            ], 400);
+        }
+
+        $productIds = $carts
+            ->pluck('product_id')
+            ->unique()
+            ->sort()
+            ->values();
+
+        $locks = [];
+
+        try {
+            foreach ($productIds as $productId) {
+                $lock = Cache::lock("distributed-lock:product-stock:{$productId}", 10);
+                $lock->block(5);
+                $locks[] = $lock;
+            }
+
+            $response = DB::transaction(function () use ($request, $user, $carts, $productIds, $simulateFailure) {
+
+                $lockedProducts = Product::whereIn('id', $productIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+
+                foreach ($carts as $item) {
+                    $product = $lockedProducts->get($item->product_id);
+
+                    if (!$product) {
+                        return response()->json([
+                            'message' => 'Product not found',
+                            'product_id' => $item->product_id,
+                            'api_version' => 'v2-safe',
+                        ], 404);
+                    }
+
+                    $availableQuantity = (int) $product->quantity;
+                    $requestedQuantity = (int) $item->quantity;
+
+                    if ($availableQuantity < $requestedQuantity) {
+                        return response()->json([
+                            'message' => 'You need to change quantity as exist',
+                            'reason' => 'Insufficient stock',
+                            'product_id' => $product->id,
+                            'available' => $availableQuantity,
+                            'requested' => $requestedQuantity,
+                            'api_version' => 'v2-safe',
+                        ], 409);
+                    }
+                }
+
+                $subtotal = 0;
+
+                foreach ($carts as $item) {
+                    $product = $lockedProducts->get($item->product_id);
+                    $subtotal += (float) $item->quantity * (float) $product->price;
+                }
+
+                $neworder = new Order();
+                $neworder->status = "transconfirm";
+                $neworder->payment = $request->payment;
+                $neworder->total = $subtotal;
+                $neworder->place = $request->place;
+                $neworder->street = $request->street;
+                $neworder->buildingfloor = $request->buildingfloor;
+                $neworder->phone = $request->phone;
+                $neworder->mainphone = $user->phone;
+                $neworder->description = $request->description;
+                $neworder->user_id = $user->id;
+                $neworder->save();
+
+                foreach ($carts as $item) {
+                    $product = $lockedProducts->get($item->product_id);
+
+                    $updateData = [
+                        'quantity' => ((int) $product->quantity) - ((int) $item->quantity),
+                    ];
+
+                    if (Schema::hasColumn('products', 'version')) {
+                        $updateData['version'] = ((int) $product->version) + 1;
+                    }
+
+                    Product::where('id', $product->id)->update($updateData);
+
+                    $neworderproduct = new OrderProduct();
+                    $neworderproduct->quantity = $item->quantity;
+                    $neworderproduct->order_id = $neworder->id;
+                    $neworderproduct->product_id = $item->product_id;
+                    $neworderproduct->save();
+
+                    Cart::where('id', $item->id)->update([
+                        'status' => 'completed',
+                    ]);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | ACID rollback demonstration
+                |--------------------------------------------------------------------------
+                | في وضع العرض فقط، نرمي خطأ بعد تنفيذ كل تعديلات قاعدة البيانات.
+                | لأننا داخل DB::transaction، يجب أن يرجع:
+                | - المخزون إلى قيمته السابقة
+                | - حذف الطلب الذي تم إنشاؤه
+                | - حذف order_products
+                | - إعادة cart إلى active
+                */
+                if ($simulateFailure) {
+                    throw new \RuntimeException(
+                        'SIMULATED_ACID_FAILURE_AFTER_DATABASE_WRITES'
+                    );
+                }
+
+                SendOrderEmail::dispatch($neworder)->afterCommit();
+
+                return response()->json([
+                    'message' => 'order placed safely',
+                    'order_id' => $neworder->id,
+                    'total' => $subtotal,
+                    'api_version' => 'v2-safe-transaction-distributed-lock',
+                    'instance' => env('APP_INSTANCE', 'single-instance'),
+                ], 201);
+            });
+
+            return $response;
+
+        } catch (LockTimeoutException $e) {
+            return response()->json([
+                'message' => 'System is busy, please retry',
+                'reason' => 'distributed lock timeout',
+                'api_version' => 'v2-safe',
+                'instance' => env('APP_INSTANCE', 'single-instance'),
+            ], 429);
+
+        } catch (\Throwable $e) {
+            if (
+                $e instanceof \RuntimeException
+                && $e->getMessage() ===
+                    'SIMULATED_ACID_FAILURE_AFTER_DATABASE_WRITES'
+            ) {
+                Log::warning('ACID_ROLLBACK_DEMO_COMPLETED', [
+                    'user_id' => $user->id ?? null,
+                    'instance' => config('app.instance'),
+                    'message' => $e->getMessage(),
+                ]);
+
+                return response()->json([
+                    'message' => 'Simulated failure executed',
+                    'result' => 'Transaction rolled back',
+                    'expected_checks' => [
+                        'stock_unchanged',
+                        'order_not_created',
+                        'order_products_not_created',
+                        'cart_still_active',
+                        'email_job_not_dispatched',
+                    ],
+                    'api_version' => 'v2-acid-rollback-demo',
+                    'instance' => config('app.instance'),
+                ], 422);
+            }
+
+            Log::error('ORDER_V2_FAILED', [
+                'error' => $e->getMessage(),
+                'user_id' => $user->id ?? null,
+                'api_version' => 'v2-safe',
+                'instance' => config('app.instance'),
+            ]);
+
+            return response()->json([
+                'message' => 'Order failed safely',
+                'error' => $e->getMessage(),
+                'api_version' => 'v2-safe',
+            ], 500);
+
+        } finally {
+            foreach (array_reverse($locks) as $lock) {
+                optional($lock)->release();
+            }
+        }
     }
 
     public function StoreConfirm(Request $request) {

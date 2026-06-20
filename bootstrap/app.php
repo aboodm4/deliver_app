@@ -26,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'delivery'=>\App\Http\Middleware\DeliveryMiddleware::class,
             'deliveryOrAdmin'=>\App\Http\Middleware\DeliveryOrAdminMiddleware::class,
             'cache.response' => \App\Http\Middleware\CacheResponse::class,
+            'aop.performance' => \App\Http\Middleware\PerformanceAopMiddleware::class,
         ]);
 
         //

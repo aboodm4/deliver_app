@@ -21,3 +21,5 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+tests/k6/results_old.json
+tests/k6/results_new.json

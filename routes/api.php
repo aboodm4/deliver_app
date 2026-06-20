@@ -17,13 +17,6 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
 require __DIR__.'/auth.php';
 
-// Route لمحاكاة موازنة العمليات و السيرفرات (Load Balancing)
-Route::get('/node-status', function () {
-    return response()->json([
-        'message' => 'Task handled by node',
-        'port' => request()->getPort()
-    ]);
-});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/process-daily-sales',function(){
@@ -72,6 +65,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     });
 
+    Route::prefix('/v2/product')->group(function () {
+        Route::post('/minus-product', [ProductController::class, 'MinusProductV2'])
+            ->middleware('aop.performance');
+    });
+
     Route::prefix('/favourite')->group(function(){
 
         Route::get('/',[FavouriteController::class,'index']);
@@ -91,7 +89,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::prefix('/order')->group(function(){
         Route::get('/',[OrderController::class,'index']);
-        Route::post('/store',[OrderController::class,'store']);
+        Route::post('/store', [OrderController::class, 'store'])
+                ->middleware('aop.performance');
 
         Route::get('/destroy/{id}',[OrderController::class,'destroy']);
         Route::post('/storeconfirm',[OrderController::class,'StoreConfirm'])->middleware(['auth', 'admin']);
@@ -111,6 +110,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // 'placed', 'storeconfirm', 'transconfirm', 'userconfirm'
     });
 
+    Route::prefix('/v2/order')->group(function () {
+        Route::post('/store', [OrderController::class, 'storeV2'])
+            ->middleware('aop.performance');
+    });
 
     Route::post('/makedeliver',action: [MainController::class,'MakeDeliver'])->middleware(['auth', 'admin']);
     Route::post('/makeuser',action: [MainController::class,'MakeUser'])->middleware(['auth', 'admin']);

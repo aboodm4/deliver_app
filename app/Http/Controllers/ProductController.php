@@ -11,7 +11,9 @@ use App\Jobs\ProcessProductUpload;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
-
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 class ProductController extends Controller
 {
     /**
@@ -24,7 +26,6 @@ class ProductController extends Controller
             'product'=>$product
         ],200);
     }
-
     /**
      * Display the most requested products using caching (Redis).
      */
@@ -255,6 +256,97 @@ class ProductController extends Controller
             });
         } catch (\Exception $e) {
             return response()->json(['message' => 'Concurrency error: ' . $e->getMessage()], 500);
+        }
+    }
+
+
+    public function MinusProductV2(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        $productId = (int) $request->product_id;
+        $quantityToDeduct = (int) $request->quantity;
+
+        $lock = Cache::lock("distributed-lock:product-stock:{$productId}", 10);
+
+        try {
+            $lock->block(5);
+
+            $response = DB::transaction(function () use ($productId, $quantityToDeduct) {
+                $product = Product::where('id', $productId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$product) {
+                    return response()->json([
+                        'message' => 'Product not found',
+                        'api_version' => 'v2-safe-inventory',
+                    ], 404);
+                }
+
+                $availableQuantity = (int) $product->quantity;
+
+                if ($availableQuantity < $quantityToDeduct) {
+                    return response()->json([
+                        'message' => 'Insufficient stock',
+                        'product_id' => $product->id,
+                        'available' => $availableQuantity,
+                        'requested' => $quantityToDeduct,
+                        'api_version' => 'v2-safe-inventory',
+                    ], 409);
+                }
+
+                $newQuantity = $availableQuantity - $quantityToDeduct;
+
+                $updateData = [
+                    'quantity' => $newQuantity,
+                ];
+
+                if (Schema::hasColumn('products', 'version')) {
+                    $updateData['version'] = ((int) $product->version) + 1;
+                }
+
+                Product::where('id', $product->id)->update($updateData);
+
+                return response()->json([
+                    'message' => 'Inventory deducted safely',
+                    'product_id' => $product->id,
+                    'old_quantity' => $availableQuantity,
+                    'deducted' => $quantityToDeduct,
+                    'new_quantity' => $newQuantity,
+                    'api_version' => 'v2-safe-inventory-distributed-lock',
+                    'instance' => env('APP_INSTANCE', 'single-instance'),
+                ], 200);
+            });
+
+            return $response;
+
+        } catch (LockTimeoutException $e) {
+            return response()->json([
+                'message' => 'System is busy, please retry',
+                'reason' => 'distributed lock timeout',
+                'api_version' => 'v2-safe-inventory',
+                'instance' => env('APP_INSTANCE', 'single-instance'),
+            ], 429);
+
+        } catch (\Throwable $e) {
+            Log::error('PRODUCT_MINUS_V2_FAILED', [
+                'error' => $e->getMessage(),
+                'product_id' => $productId,
+                'api_version' => 'v2-safe-inventory',
+            ]);
+
+            return response()->json([
+                'message' => 'Inventory update failed safely',
+                'error' => $e->getMessage(),
+                'api_version' => 'v2-safe-inventory',
+            ], 500);
+
+        } finally {
+            optional($lock)->release();
         }
     }
 
