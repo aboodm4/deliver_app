@@ -281,22 +281,15 @@ class ProductController extends Controller
                     ->first();
 
                 if (!$product) {
-                    return response()->json([
-                        'message' => 'Product not found',
-                        'api_version' => 'v2-safe-inventory',
-                    ], 404);
+                    // FORCE ROLLBACK: Throwing ensures transaction safety
+                    throw new \RuntimeException("PRODUCT_NOT_FOUND");
                 }
 
                 $availableQuantity = (int) $product->quantity;
 
                 if ($availableQuantity < $quantityToDeduct) {
-                    return response()->json([
-                        'message' => 'Insufficient stock',
-                        'product_id' => $product->id,
-                        'available' => $availableQuantity,
-                        'requested' => $quantityToDeduct,
-                        'api_version' => 'v2-safe-inventory',
-                    ], 409);
+                    // FORCE ROLLBACK: Aborts database state changes cleanly
+                    throw new \RuntimeException("INSUFFICIENT_STOCK:{$availableQuantity}");
                 }
 
                 $newQuantity = $availableQuantity - $quantityToDeduct;
@@ -333,15 +326,36 @@ class ProductController extends Controller
             ], 429);
 
         } catch (\Throwable $e) {
+            $errorMessage = $e->getMessage();
+
+            // Safe evaluation of transaction exceptions outside the locked DB block
+            if ($errorMessage === 'PRODUCT_NOT_FOUND') {
+                return response()->json([
+                    'message' => 'Product not found',
+                    'api_version' => 'v2-safe-inventory',
+                ], 404);
+            }
+
+            if (str_starts_with($errorMessage, 'INSUFFICIENT_STOCK:')) {
+                $available = (int) str_replace('INSUFFICIENT_STOCK:', '', $errorMessage);
+                return response()->json([
+                    'message' => 'Insufficient stock',
+                    'product_id' => $productId,
+                    'available' => $available,
+                    'requested' => $quantityToDeduct,
+                    'api_version' => 'v2-safe-inventory',
+                ], 409);
+            }
+
             Log::error('PRODUCT_MINUS_V2_FAILED', [
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
                 'product_id' => $productId,
                 'api_version' => 'v2-safe-inventory',
             ]);
 
             return response()->json([
                 'message' => 'Inventory update failed safely',
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
                 'api_version' => 'v2-safe-inventory',
             ], 500);
 

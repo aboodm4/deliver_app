@@ -81,6 +81,69 @@ class OrderController extends Controller
         ], 200);
     }
 
+    
+    public function indexV2()
+    {
+        $user_id = Auth::user()->id;
+
+        // 1. Fetch all user orders
+        $user_orders = Order::where('user_id', $user_id)->get();
+
+        if ($user_orders->isEmpty()) {
+            return response()->json([
+                'message' => 'You don\'t have any orders yet',
+            ], 400);
+        }
+
+        $orderIds = $user_orders->pluck('id')->toArray();
+
+        // 2. Fetch all OrderProduct records in a single query
+        $orderProducts = OrderProduct::whereIn('order_id', $orderIds)->get();
+        $productIds = $orderProducts->pluck('product_id')->unique()->toArray();
+
+        // 3. Fetch all referenced Products in a single query
+        $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+
+        // Group order products by order_id for fast in-memory filtering
+        $orderProductsGrouped = $orderProducts->groupBy('order_id');
+
+        $ordersdata = collect();
+
+        foreach ($user_orders as $order) {
+            $order_products_details = [];
+            $currentOrderProducts = $orderProductsGrouped->get($order->id) ?? collect();
+
+            foreach ($currentOrderProducts as $orderproduct) {
+                $product = $products->get($orderproduct->product_id);
+
+                if ($product) {
+                    $order_products_details[] = [
+                        'product_id' => $product->id,
+                        'product_name' => $product->name,
+                        'quantity' => $orderproduct->quantity,
+                        'price' => $product->price,
+                        'product_data' => $product,
+                    ];
+                }
+            }
+
+            $formatted_order_date = $order->created_at->format('Y-m-d H:i');
+
+            $ordersdata->push([
+                'order_id' => $order->id,
+                'order_date' => $formatted_order_date,
+                'status' => $order->status,
+                'total_amount' => $order->total,
+                'products' => $order_products_details,
+            ]);
+        }
+
+        return response()->json([
+            'orders' => $ordersdata
+        ], 200);
+    }
+    
+
     /**
      * Show the form for creating a new resource.
      */
@@ -228,25 +291,16 @@ class OrderController extends Controller
                     $product = $lockedProducts->get($item->product_id);
 
                     if (!$product) {
-                        return response()->json([
-                            'message' => 'Product not found',
-                            'product_id' => $item->product_id,
-                            'api_version' => 'v2-safe',
-                        ], 404);
+                        // FIX: Throwing an exception guarantees an ACID rollback
+                        throw new \RuntimeException("PRODUCT_NOT_FOUND:{$item->product_id}");
                     }
 
                     $availableQuantity = (int) $product->quantity;
                     $requestedQuantity = (int) $item->quantity;
 
                     if ($availableQuantity < $requestedQuantity) {
-                        return response()->json([
-                            'message' => 'You need to change quantity as exist',
-                            'reason' => 'Insufficient stock',
-                            'product_id' => $product->id,
-                            'available' => $availableQuantity,
-                            'requested' => $requestedQuantity,
-                            'api_version' => 'v2-safe',
-                        ], 409);
+                        // FIX: Throwing an exception guarantees an ACID rollback
+                        throw new \RuntimeException("INSUFFICIENT_STOCK:{$product->id}:{$availableQuantity}:{$requestedQuantity}");
                     }
                 }
 
@@ -293,7 +347,6 @@ class OrderController extends Controller
                         'status' => 'completed',
                     ]);
                 }
-
                 /*
                 |--------------------------------------------------------------------------
                 | ACID rollback demonstration
@@ -333,10 +386,33 @@ class OrderController extends Controller
             ], 429);
 
         } catch (\Throwable $e) {
+            $errorMessage = $e->getMessage();
+
+            // Handle the thrown Product Not Found Exception cleanly outside the transaction
+            if (str_starts_with($errorMessage, 'PRODUCT_NOT_FOUND:')) {
+                $parts = explode(':', $errorMessage);
+                return response()->json([
+                    'message' => 'Product not found',
+                    'product_id' => $parts[1],
+                    'api_version' => 'v2-safe',
+                ], 404);
+            }
+
+            // Handle the thrown Insufficient Stock Exception cleanly outside the transaction
+            if (str_starts_with($errorMessage, 'INSUFFICIENT_STOCK:')) {
+                $parts = explode(':', $errorMessage);
+                return response()->json([
+                    'message' => 'You need to change quantity as exist',
+                    'reason' => 'Insufficient stock',
+                    'product_id' => $parts[1],
+                    'available' => (int)$parts[2],
+                    'requested' => (int)$parts[3],
+                    'api_version' => 'v2-safe',
+                ], 409);
+            }
+
             if (
-                $e instanceof \RuntimeException
-                && $e->getMessage() ===
-                    'SIMULATED_ACID_FAILURE_AFTER_DATABASE_WRITES'
+                $errorMessage === 'SIMULATED_ACID_FAILURE_AFTER_DATABASE_WRITES'
             ) {
                 Log::warning('ACID_ROLLBACK_DEMO_COMPLETED', [
                     'user_id' => $user->id ?? null,

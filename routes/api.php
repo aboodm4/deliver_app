@@ -88,7 +88,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/addone',[CartController::class,'AddOne']);
     });
     Route::prefix('/order')->group(function(){
-        Route::get('/',[OrderController::class,'index']);
+        Route::get('/',[OrderController::class,'index'])
+                ->middleware('aop.performance');
         Route::post('/store', [OrderController::class, 'store'])
                 ->middleware('aop.performance');
 
@@ -111,6 +112,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('/v2/order')->group(function () {
+        Route::get('/',[OrderController::class,'indexV2'])
+            ->middleware('aop.performance');
         Route::post('/store', [OrderController::class, 'storeV2'])
             ->middleware('aop.performance');
     });
